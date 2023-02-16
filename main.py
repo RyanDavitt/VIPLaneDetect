@@ -14,18 +14,34 @@ import numpy as np
 
 # parameters
 slopecutoff = 0.5
-image_name = "dash.jpeg"
+#image_name = "um_000006.png"
 
-image_path = "content/" + image_name
-image1 = cv2.imread(image_path)
+#image_path = "content/" + image_name
+#image1 = cv2.imread(image_path)
 #plt.imshow(image1)
 
+def Hsv(image):
+    image = np.asarray(image)
+    return cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-def grey(image):
+def Grey(image):
     # convert to grayscale
     image = np.asarray(image)
     return cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
 
+def White(hsv):
+    lower_white = np.array([0, 0, 128], dtype=np.uint8)
+    upper_white = np.array([0, 0, 255], dtype=np.uint8)
+
+    # Threshold the HSV image to get only white colors
+    return cv2.inRange(hsv, lower_white, upper_white)
+
+def Yellow(hsv):
+    lower_yellow = np.array([15, 50, 127], dtype=np.uint8)
+    upper_yellow = np.array([25, 100, 255], dtype=np.uint8)
+
+    # Threshold the HSV image to get only white colors
+    return cv2.inRange(hsv, lower_yellow, upper_yellow)
 
 # Apply Gaussian Blur --> Reduce noise and smoothen image
 def gauss(image):
@@ -42,7 +58,7 @@ def region(image):
     height, width = image.shape
     # isolate the gradients that correspond to the lane lines
     triangle = np.array([
-        [(0, height), (int(width / 2), int(height / 3)), (width, height)]
+        [(0, height), (int(width / 2), int(height / 4)), (width, height)]
     ])
     # create a black image with the same dimensions as original image
     mask = np.zeros_like(image)
@@ -74,11 +90,11 @@ def average(image, lines):
 
     if lines is not None:
         for line in lines:
-            print(line)
+            #print(line)
             x1, y1, x2, y2 = line.reshape(4)
             # fit line to points, return slope and y-int
             parameters = np.polyfit((x1, x2), (y1, y2), 1)
-            print(parameters)
+            #print(parameters)
             slope = parameters[0]
             y_int = parameters[1]
             # lines on the right have positive slope, and lines on the left have neg slope
@@ -111,7 +127,7 @@ def average(image, lines):
     return np.array([left_line, right_line])
 
 def make_points(image, average):
-    print(average)
+    #print(average)
     slope, y_int = average
     y1 = image.shape[0]
     # how long we want our lines to be --> 3/5 the size of the image
@@ -140,15 +156,34 @@ lanes = cv2.addWeighted(copy, 0.8, black_lines, 1, 1)
 cv2(lanes)
 cv2.waitKey(0)
 '''
-copy = np.copy(image1)
-grey = grey(copy)
-gaus = gauss(grey)
-edges = canny(gaus)
-isolated = region(edges)
-lines = cv2.HoughLinesP(isolated, 2, np.pi/180, 100, np.array([]), minLineLength=40, maxLineGap=5)
-averaged_lines = average(copy, lines)
-black_lines = display_lines(copy, averaged_lines)
-lanes = cv2.addWeighted(copy, 0.8, black_lines, 1, 1)
-#cv2.imshow("lanes", lanes)
-cv2.imwrite("content/output/" + image_name, lanes)
-cv2.waitKey(0)
+
+def compute(image_path):
+    image1 = cv2.imread(image_path)
+    copy = np.copy(image1)
+    grey = Grey(copy)
+    hsv = Hsv(copy)
+    white = White(hsv)
+    yellow = Yellow(hsv)
+    weighted = cv2.addWeighted(grey, 0.2, white, 1, 1)
+    weighted = cv2.addWeighted(weighted, 1, yellow, 1, 1)
+    # cv2.imshow("weighted", weighted)
+    # gaus_grey = gauss(grey)
+    # gaus_white = gauss(white)
+    # gaus_yellow = gauss(yellow)
+    # edges = canny(gaus_grey)
+    edges = canny(weighted)
+    isolated = region(edges)
+    cv2.imshow("isolated", isolated)
+    lines = cv2.HoughLinesP(isolated, 2, np.pi / 180, 100, np.array([]), minLineLength=40, maxLineGap=5)
+    averaged_lines = average(copy, lines)
+    black_lines = display_lines(copy, averaged_lines)
+    lanes = cv2.addWeighted(copy, 0.8, black_lines, 1, 1)
+    cv2.imwrite("content/output/" + image_name, lanes)
+    cv2.waitKey(0)
+
+image_num = 10
+while image_num < 95 :
+    image_name = "um_0000" + str(image_num) + ".png"
+    image_path = "content/" + image_name
+    compute(image_path)
+    image_num += 1
