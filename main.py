@@ -14,7 +14,8 @@ import numpy as np
 
 # parameters
 slopecutoff = 0.5
-#image_name = "um_000006.png"
+image_num_max = 95
+image_prefix = "um"
 
 #image_path = "content/" + image_name
 #image1 = cv2.imread(image_path)
@@ -30,18 +31,54 @@ def Grey(image):
     return cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
 
 def White(hsv):
-    lower_white = np.array([0, 0, 128], dtype=np.uint8)
+    lower_white = np.array([0, 0, 80], dtype=np.uint8)
     upper_white = np.array([0, 0, 255], dtype=np.uint8)
 
     # Threshold the HSV image to get only white colors
     return cv2.inRange(hsv, lower_white, upper_white)
 
 def Yellow(hsv):
-    lower_yellow = np.array([15, 50, 127], dtype=np.uint8)
-    upper_yellow = np.array([25, 100, 255], dtype=np.uint8)
+    lower_yellow = np.array([20, 50, 127], dtype=np.uint8)
+    upper_yellow = np.array([32.5, 100, 255], dtype=np.uint8)
 
     # Threshold the HSV image to get only white colors
     return cv2.inRange(hsv, lower_yellow, upper_yellow)
+
+# Adjusts contrast and brightness of an image. 0 < contr < 1 is lower contrast and contr > 1 is higher contrast
+def autolevel(image, clip_hist_percent=1):
+    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+
+    # Calculate grayscale histogram
+    hist = cv2.calcHist([gray], [0], None, [256], [0, 256])
+    hist_size = len(hist)
+
+    # Calculate cumulative distribution from the histogram
+    accumulator = []
+    accumulator.append(float(hist[0]))
+    for index in range(1, hist_size):
+        accumulator.append(accumulator[index - 1] + float(hist[index]))
+
+    # Locate points to clip
+    maximum = accumulator[-1]
+    clip_hist_percent *= (maximum / 100.0)
+    clip_hist_percent /= 2.0
+
+    # Locate left cut
+    minimum_gray = 0
+    while accumulator[minimum_gray] < clip_hist_percent:
+        minimum_gray += 1
+
+    # Locate right cut
+    maximum_gray = hist_size - 1
+    while accumulator[maximum_gray] >= (maximum - clip_hist_percent):
+        maximum_gray -= 1
+
+    # Calculate alpha and beta values
+    alpha = 255 / (maximum_gray - minimum_gray)
+    beta = -minimum_gray * alpha
+
+    auto_result = cv2.convertScaleAbs(image, alpha=alpha, beta=beta)
+    return auto_result
 
 # Apply Gaussian Blur --> Reduce noise and smoothen image
 def gauss(image):
@@ -53,12 +90,15 @@ def canny(image):
     edges = cv2.Canny(image, 50, 150)
     return edges
 
+def laplace(image):
+    edges = cv2.Laplacian(image, cv2.CV_16S, ksize=3)
+    return cv2.convertScaleAbs(edges)
 
 def region(image):
     height, width = image.shape
     # isolate the gradients that correspond to the lane lines
     triangle = np.array([
-        [(0, height), (int(width / 2), int(height / 4)), (width, height)]
+        [(int(width / 5), height), (int(width / 2), int(height / 3.5)), (int(width - width / 5), height)]
     ])
     # create a black image with the same dimensions as original image
     mask = np.zeros_like(image)
@@ -157,14 +197,24 @@ cv2(lanes)
 cv2.waitKey(0)
 '''
 
-def compute(image_path):
-    image1 = cv2.imread(image_path)
+def compute(image_name, show_image):
+    image1 = cv2.imread("content/" + image_name)
     copy = np.copy(image1)
-    grey = Grey(copy)
+
+    # First get greyscale light balance
+    #a = 255 / (grey.max() - grey.min())
+    #print("alpha val: " + str(a))
+    #b = grey.min() * -a
+    #copy = cv2.convertScaleAbs(copy, alpha=a, beta=b)
+    #copy = autolevel(copy, clip_hist_percent=0.95)
+
+    # Now go for edge detection
+    grey = gauss(Grey(copy))
     hsv = Hsv(copy)
-    white = White(hsv)
-    yellow = Yellow(hsv)
-    weighted = cv2.addWeighted(grey, 0.2, white, 1, 1)
+    white = gauss(White(hsv))
+    yellow = gauss(Yellow(hsv))
+
+    weighted = cv2.addWeighted(grey, 0.35, white, 1, 1)
     weighted = cv2.addWeighted(weighted, 1, yellow, 1, 1)
     # cv2.imshow("weighted", weighted)
     # gaus_grey = gauss(grey)
@@ -172,18 +222,34 @@ def compute(image_path):
     # gaus_yellow = gauss(yellow)
     # edges = canny(gaus_grey)
     edges = canny(weighted)
+    #edges = laplace(weighted)
     isolated = region(edges)
-    cv2.imshow("isolated", isolated)
-    lines = cv2.HoughLinesP(isolated, 2, np.pi / 180, 100, np.array([]), minLineLength=40, maxLineGap=5)
-    averaged_lines = average(copy, lines)
-    black_lines = display_lines(copy, averaged_lines)
-    lanes = cv2.addWeighted(copy, 0.8, black_lines, 1, 1)
-    cv2.imwrite("content/output/" + image_name, lanes)
-    cv2.waitKey(0)
+    if(show_image):
+        cv2.imshow("grey", grey)
+        cv2.imshow("isolated", isolated)
+        cv2.imshow("weighted", weighted)
+        cv2.waitKey(0)
 
-image_num = 10
-while image_num < 95 :
-    image_name = "um_0000" + str(image_num) + ".png"
-    image_path = "content/" + image_name
-    compute(image_path)
-    image_num += 1
+    lines = cv2.HoughLinesP(isolated, 2, np.pi / 180, 100, np.array([]), minLineLength=30, maxLineGap=20)
+    averaged_lines = average(copy, lines)
+    if averaged_lines.size != 0:
+        black_lines = display_lines(copy, averaged_lines)
+        lanes = cv2.addWeighted(copy, 0.8, black_lines, 1, 1)
+        cv2.imwrite("content/output/" + image_name, lanes)
+    else:
+        print("Solution null. No output for " + image_name)
+
+def batch():
+    image_num = 0
+    while image_num <= image_num_max:
+        if image_num < 10:
+            image_name = image_prefix + "_00000" + str(image_num) + ".png"
+        else:
+            image_name = image_prefix + "_0000" + str(image_num) + ".png"
+        #image_path = "content/" + image_name
+        compute(image_name, 0)
+        image_num += 1
+
+# Begin primary code
+#batch() # Processes images in batch (same prefix from 0 up until image_num_max)
+compute("um_000001.png", 1)
