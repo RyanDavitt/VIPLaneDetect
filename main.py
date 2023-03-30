@@ -13,9 +13,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # parameters
-slopecutoff = 0.5
-image_num_max = 95
-image_prefix = "um"
+slopecutoff = 0.7
+image_num_max = 93
+image_prefix = "umm"
 
 #image_path = "content/" + image_name
 #image1 = cv2.imread(image_path)
@@ -31,8 +31,8 @@ def Grey(image):
     return cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
 
 def White(hsv):
-    lower_white = np.array([0, 0, 80], dtype=np.uint8)
-    upper_white = np.array([0, 0, 255], dtype=np.uint8)
+    lower_white = np.array([0, 0, 200], dtype=np.uint8)
+    upper_white = np.array([255, 20, 255], dtype=np.uint8)
 
     # Threshold the HSV image to get only white colors
     return cv2.inRange(hsv, lower_white, upper_white)
@@ -98,7 +98,7 @@ def region(image):
     height, width = image.shape
     # isolate the gradients that correspond to the lane lines
     triangle = np.array([
-        [(int(width / 5), height), (int(width / 2), int(height / 3.5)), (int(width - width / 5), height)]
+        [(int(width / 5), height), (int(width / 2), int(height / 3)), (int(width - width / 3), height)]
     ])
     # create a black image with the same dimensions as original image
     mask = np.zeros_like(image)
@@ -209,19 +209,20 @@ def compute(image_name, show_image):
     #copy = autolevel(copy, clip_hist_percent=0.95)
 
     # Now go for edge detection
-    grey = gauss(Grey(copy))
+    grey = Grey(copy)
     hsv = Hsv(copy)
-    white = gauss(White(hsv))
-    yellow = gauss(Yellow(hsv))
+    white = White(hsv)
+    yellow = Yellow(hsv)
 
     weighted = cv2.addWeighted(grey, 0.35, white, 1, 1)
     weighted = cv2.addWeighted(weighted, 1, yellow, 1, 1)
+    gaus = gauss(weighted)
     # cv2.imshow("weighted", weighted)
     # gaus_grey = gauss(grey)
     # gaus_white = gauss(white)
     # gaus_yellow = gauss(yellow)
     # edges = canny(gaus_grey)
-    edges = canny(weighted)
+    edges = canny(gaus)
     #edges = laplace(weighted)
     isolated = region(edges)
     if(show_image):
@@ -251,5 +252,5 @@ def batch():
         image_num += 1
 
 # Begin primary code
-#batch() # Processes images in batch (same prefix from 0 up until image_num_max)
-compute("um_000001.png", 1)
+batch() # Processes images in batch (same prefix from 0 up until image_num_max)
+#compute("um_000064.png", 1)
