@@ -54,7 +54,7 @@ class Line():
 """
 
 def perspective_transformer():
-    global src, dst, M, Minv
+    global src, dst, M, Minv, img_width, img_height
     
 #     src = np.float32([
 #         [678, 440],[1279, 720],
@@ -66,18 +66,19 @@ def perspective_transformer():
 #         [100, 720],[100, 0]])
     
     # Define the perspective transformation area
-    img_width = 1280
-    img_height = 720
+    img_width = 1242
+    img_height = 375
 
-    bot_width = .76 # percent of bottom
-    mid_width = .17 #.17
-    height_pct = .66 #.66
-    bottom_trim = .935
+    bot_width = .68 # percent of bottom
+    mid_width = .22 #.17
+    height_pct = .76 #.66
+    bottom_trim = .95
+    x_shift = 0.025
     src = np.float32([
-        [img_width*(.5-mid_width/2), img_height*height_pct],
-        [img_width*(.5+mid_width/2), img_height*height_pct],
-        [img_width*(.5+bot_width/2), img_height*bottom_trim],
-        [img_width*(.5-bot_width/2), img_height*bottom_trim]
+        [img_width*(.5-mid_width/2) - img_width*x_shift, img_height*height_pct],
+        [img_width*(.5+mid_width/2) - img_width*x_shift, img_height*height_pct],
+        [img_width*(.5+bot_width/2) - img_width*x_shift, img_height*bottom_trim],
+        [img_width*(.5-bot_width/2) - img_width*x_shift, img_height*bottom_trim]
     ])
     
     offset = img_width*.2
@@ -213,7 +214,7 @@ def sliding_windows_search(img):
     out_img = np.dstack((binary_warped, binary_warped, binary_warped))
     # Find the peak of the left and right halves of the histogram
     # These will be the starting point for the left and right lines
-    midpoint = np.int(histogram.shape[0]/2)
+    midpoint = int(histogram.shape[0]/2)
     
     leftx_base = np.argmax(histogram[:midpoint])
     rightx_base = np.argmax(histogram[midpoint:]) + midpoint
@@ -221,7 +222,7 @@ def sliding_windows_search(img):
     # Choose the number of sliding windows
     nwindows = 9
     # Set height of windows
-    window_height = np.int(binary_warped.shape[0]/nwindows)
+    window_height = int(binary_warped.shape[0]/nwindows)
     # Identify the x and y positions of all nonzero pixels in the image
     nonzero = binary_warped.nonzero()
     nonzeroy = np.array(nonzero[0])
@@ -257,9 +258,9 @@ def sliding_windows_search(img):
         right_lane_inds.append(good_right_inds)
         # If you found > minpix pixels, recenter next window on their mean position
         if len(good_left_inds) > minpix:
-            leftx_current = np.int(np.mean(nonzerox[good_left_inds]))
+            leftx_current = int(np.mean(nonzerox[good_left_inds]))
         if len(good_right_inds) > minpix:        
-            rightx_current = np.int(np.mean(nonzerox[good_right_inds]))
+            rightx_current = int(np.mean(nonzerox[good_right_inds]))
 
     # Concatenate the arrays of indices
     left_lane_inds = np.concatenate(left_lane_inds)
@@ -414,22 +415,22 @@ def lane_quality(ploty, left_fitx, right_fitx):
 
 """## Build a lane finding pipeline"""
 
-def lane_finding(img_orig):
+def lane_finding(img_orig, line_l, line_r):
     
     # 1. Compute the camera calibration matrix and distortion coefficients given a set of chessboard images.        
     # mtx, dist are global variables
     
     # 2. Apply a distortion correction to raw images.
-    img_undist = cv2.undistort(img_orig, mtx, dist, None, mtx)
+    #img_undist = cv2.undistort(img_orig, mtx, dist, None, mtx)
     
     # 3. Use color transforms, gradients, etc., to create a thresholded binary image.
-    img_thresh = thresh_pipeline(img_undist, gradx_thresh=(25,255), grady_thresh=(10,255), s_thresh=(100, 255), v_thresh=(0, 255))
+    img_thresh = thresh_pipeline(img_orig, gradx_thresh=(25,255), grady_thresh=(10,255), s_thresh=(100, 255), v_thresh=(0, 255))
     
     # 4. Apply a perspective transform to rectify binary image ("birds-eye view").
     # src, dst, M, Minv are global variables
 
     img_birdeye = warper(img_thresh, src, dst)
-    img_birdeye_color = warper(img_undist, src, dst)
+    img_birdeye_color = warper(img_orig, src, dst)
     
     # 5. Detect lane pixels and fit to find the lane boundary. 
         
@@ -498,7 +499,7 @@ def lane_finding(img_orig):
         
         del line_r.recent_xfitted[-1]
         
-        left_fit, right_fit = line_l.best_fit[0], line_r.best_fit[0]
+        left_fit, right_fit = line_l.best_fit, line_r.best_fit
         
         cv2.putText(img_search, '------', 
             (550, 350), cv2.FONT_HERSHEY_SIMPLEX, 2, (255,0,0), 5)
@@ -528,20 +529,20 @@ def lane_finding(img_orig):
         
 
     # 7. Warp the detected lane boundaries back onto the original image.
-    result = lane_mask(img_undist, img_birdeye, Minv, ploty, left_fitx, right_fitx)
+    result = lane_mask(img_orig, img_birdeye, Minv, ploty, left_fitx, right_fitx)
     cv2.putText(result, 'Radius of Curvature (L) = '+str(round(left_curverad, 1))+'(m)', 
-                (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
+                (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2)
     cv2.putText(result, 'Radius of Curvature (R) = '+str(round(right_curverad, 1))+'(m)', 
-                (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
+                (50, 100), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2)
     cv2.putText(result, 'Vehicle is '+str(round(center_diff, 2))+'(m) off center', 
-                (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
+                (50, 150), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2)
     cv2.putText(result, 'Lane width '+str(round(lane_width_mean, 2))+'(m) Var:'+str(round(lane_width_var)), 
-                (50, 200), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,255,255), 2)
+                (50, 200), cv2.FONT_HERSHEY_SIMPLEX, 1, (255,0,0), 2)
     
-    # Output visual display of the lane boundaries and numerical estimation of lane curvature and vehicle position.
-    canvas = np.zeros([960,1280,3], dtype=np.uint8)
-    
-    canvas[0:720, 0:1280, :] = result   
+    # # Output visual display of the lane boundaries and numerical estimation of lane curvature and vehicle position.
+    # canvas = np.zeros([960,1280,3], dtype=np.uint8)
+    #
+    # canvas[0:img_height, 0:img_width, :] = result
         
     ## Plot 1 
 #     color_thresh_binary = np.dstack(( np.zeros_like(img_thresh), img_thresh, np.zeros_like(img_thresh) ))
@@ -560,7 +561,7 @@ def lane_finding(img_orig):
     
     ## Plot 4: the searching process
     plot4 = img_search
-    left_pts = np.transpose(np.vstack((left_fitx, ploty))).astype(np.int32)    
+    left_pts = np.transpose(np.vstack((left_fitx, ploty))).astype(np.int32)
     right_pts = np.transpose(np.vstack((right_fitx, ploty))).astype(np.int32)
 #     print(left_pts.shape);print(left_pts)
 #     print(right_pts.shape);print(right_pts)
@@ -573,106 +574,106 @@ def lane_finding(img_orig):
     plot2 = cv2.resize(img_birdeye_color, (426, 240))
     
     # Plot the three contents
-    canvas[720:960, 0:426, :] = plot1
-    canvas[720:960, 427:427+426, :] = plot2
-    canvas[720:960, -427:-1, :] = plot4
-    
-    return canvas
+    # canvas[720:960, 0:426, :] = plot1
+    # canvas[720:960, 427:427+426, :] = plot2
+    # canvas[720:960, -427:-1, :] = plot4
+    return result, plot1, plot2, plot4
+    #return canvas
 
 """## 1. Camera Calibration"""
 
 #!wget "https://www.kaggleusercontent.com/kf/22717527/eyJhbGciOiJkaXIiLCJlbmMiOiJBMTI4Q0JDLUhTMjU2In0..hFNng1yFKymqHz8EFJvVvw.AZoIDMKbHjspKBbQ0wy-_gz2A0ZOtsLWEdJdXWiajqn1oLZ6udBuJYRE2vhtTYZUVpsm816sL2ZkmXe-j9vXJqDbFE89QI1BahE1UTompmYJOh5Bcjr1f14sXfm9SwlfN1nYsj7ndAZTariF0FTm8h8mOdh4_K4dCHCErF6SKcc.eoMHjBFozmzgz18va-__1g/calibration_pickle.p"
 
 # Read in the saved objpoints and imgpoints
-import pickle
-global mtx, dist
-calibration_pickle = pickle.load( open( "/content/drive/MyDrive/calibration_pickle.p", "rb" ) )
-mtx = calibration_pickle["mtx"]
-dist = calibration_pickle["dist"]
-
-"""## 2. Define the Perspective Transformation"""
-
-perspective_transformer()
-print('src: {}; dst:{}'.format(src, dst))
-
-"""## 3. Test this Pipeline on single image"""
-
-# Undistort image
-img_orig = mpimg.imread('./test_images/test1.jpg')
-
-img_undist = cv2.undistort(img_orig, mtx, dist, None, mtx)
-
-# Visualize undistortion
-f, (ax1, ax2) = plt.subplots(1, 2, figsize=(20,10))
-f.tight_layout()
-ax1.set_title('Original Image', fontsize=50)
-ax1.imshow(img_orig)
-ax2.set_title('Undistorted image', fontsize=50)
-ax2.imshow(img_undist)
-plt.subplots_adjust(left=0., right=1, top=0.9, bottom=0.)
-
-img_thresh = img_thresh = thresh_pipeline(img_undist, 
-                                          gradx_thresh=(25,255), 
-                                          grady_thresh=(10,255), 
-                                          s_thresh=(100, 255), 
-                                          v_thresh=(0, 255))
-plt.imshow(img_thresh, cmap='gray'); plt.title('Threshold Output'); plt.show()
-
-img_birdeye_color = warper(img_undist, src, dst)
-
-cv2.polylines(img_undist, np.int32([src]), 
-              True, (0, 255, 0), thickness=4)
-cv2.polylines(img_birdeye_color, np.int32([dst]), 
-              True, (0, 255, 0), thickness=4)
-
-# Visualize undistortion
-f, (ax1, ax2) = plt.subplots(1, 2, figsize=(20,10))
-f.tight_layout()
-ax1.set_title('Undistorted Image with Source Points Drawn', fontsize=25)
-ax1.imshow(img_undist)
-ax2.set_title('Warped Result with Dest. Points Drawn', fontsize=25)
-ax2.imshow(img_birdeye_color)
-plt.subplots_adjust(left=0., right=1, top=0.9, bottom=0.)
-
-img_birdeye = warper(img_thresh, src, dst)
-left_fit, right_fit, img_search = sliding_windows_search(img_birdeye)
-
-ploty = np.linspace(0, img_birdeye.shape[0]-1, img_birdeye.shape[0] )
-left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
-right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
-
-left_pts = np.transpose(np.vstack((left_fitx, ploty))).astype(np.int32)    
-right_pts = np.transpose(np.vstack((right_fitx, ploty))).astype(np.int32)
-
-cv2.polylines(img_search, np.int32([left_pts]), False, (255, 255, 0), thickness=5)
-cv2.polylines(img_search, np.int32([right_pts]), False, (255, 255, 0), thickness=5)
-  
-plt.imshow(img_search)
-plt.title('Identified Lane-line Px. and Fitted Poly.')
-plt.show()
-
-"""## 4. Test this Pipeline on the testing images"""
-
-line_l = Line()
-line_r = Line()
-
-# Make a list of test images
-test_files = './test_images/test*.jpg'
-images = glob.glob(test_files)
-
-# Step through the list and search for chessboard corners
-for fname in images:
-    
-    line_l.detected = False
-    line_r.detected = False
-    
-    img_orig = cv2.imread(fname)
-    img_orig = cv2.cvtColor(img_orig, cv2.COLOR_BGR2RGB)
-#     img_orig = mpimg.imread('test_images/straight_lines.jpg') # 'straight_lines2.jpg'
-    img_output = lane_finding(img_orig)
-    plt.figure(figsize=(12,9))
-    plt.imshow(img_output); plt.axis('off'); plt.show()
-
+# import pickle
+# global mtx, dist
+# calibration_pickle = pickle.load( open( "/content/drive/MyDrive/calibration_pickle.p", "rb" ) )
+# mtx = calibration_pickle["mtx"]
+# dist = calibration_pickle["dist"]
+#
+# """## 2. Define the Perspective Transformation"""
+#
+# perspective_transformer()
+# print('src: {}; dst:{}'.format(src, dst))
+#
+# """## 3. Test this Pipeline on single image"""
+#
+# # Undistort image
+# img_orig = mpimg.imread('./test_images/test1.jpg')
+#
+# img_undist = cv2.undistort(img_orig, mtx, dist, None, mtx)
+#
+# # Visualize undistortion
+# f, (ax1, ax2) = plt.subplots(1, 2, figsize=(20,10))
+# f.tight_layout()
+# ax1.set_title('Original Image', fontsize=50)
+# ax1.imshow(img_orig)
+# ax2.set_title('Undistorted image', fontsize=50)
+# ax2.imshow(img_undist)
+# plt.subplots_adjust(left=0., right=1, top=0.9, bottom=0.)
+#
+# img_thresh = img_thresh = thresh_pipeline(img_undist,
+#                                           gradx_thresh=(25,255),
+#                                           grady_thresh=(10,255),
+#                                           s_thresh=(100, 255),
+#                                           v_thresh=(0, 255))
+# plt.imshow(img_thresh, cmap='gray'); plt.title('Threshold Output'); plt.show()
+#
+# img_birdeye_color = warper(img_undist, src, dst)
+#
+# cv2.polylines(img_undist, np.int32([src]),
+#               True, (0, 255, 0), thickness=4)
+# cv2.polylines(img_birdeye_color, np.int32([dst]),
+#               True, (0, 255, 0), thickness=4)
+#
+# # Visualize undistortion
+# f, (ax1, ax2) = plt.subplots(1, 2, figsize=(20,10))
+# f.tight_layout()
+# ax1.set_title('Undistorted Image with Source Points Drawn', fontsize=25)
+# ax1.imshow(img_undist)
+# ax2.set_title('Warped Result with Dest. Points Drawn', fontsize=25)
+# ax2.imshow(img_birdeye_color)
+# plt.subplots_adjust(left=0., right=1, top=0.9, bottom=0.)
+#
+# img_birdeye = warper(img_thresh, src, dst)
+# left_fit, right_fit, img_search = sliding_windows_search(img_birdeye)
+#
+# ploty = np.linspace(0, img_birdeye.shape[0]-1, img_birdeye.shape[0] )
+# left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
+# right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
+#
+# left_pts = np.transpose(np.vstack((left_fitx, ploty))).astype(np.int32)
+# right_pts = np.transpose(np.vstack((right_fitx, ploty))).astype(np.int32)
+#
+# cv2.polylines(img_search, np.int32([left_pts]), False, (255, 255, 0), thickness=5)
+# cv2.polylines(img_search, np.int32([right_pts]), False, (255, 255, 0), thickness=5)
+#
+# plt.imshow(img_search)
+# plt.title('Identified Lane-line Px. and Fitted Poly.')
+# plt.show()
+#
+# """## 4. Test this Pipeline on the testing images"""
+#
+# line_l = Line()
+# line_r = Line()
+#
+# # Make a list of test images
+# test_files = './test_images/test*.jpg'
+# images = glob.glob(test_files)
+#
+# # Step through the list and search for chessboard corners
+# for fname in images:
+#
+#     line_l.detected = False
+#     line_r.detected = False
+#
+#     img_orig = cv2.imread(fname)
+#     img_orig = cv2.cvtColor(img_orig, cv2.COLOR_BGR2RGB)
+# #     img_orig = mpimg.imread('test_images/straight_lines.jpg') # 'straight_lines2.jpg'
+#     img_output = lane_finding(img_orig)
+#     plt.figure(figsize=(12,9))
+#     plt.imshow(img_output); plt.axis('off'); plt.show()
+#
 
 # ## 5. Video Output:
 #

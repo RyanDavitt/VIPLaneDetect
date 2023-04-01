@@ -11,6 +11,7 @@ Original file is located at
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
+from slidingwindows import *
 
 # parameters
 slopecutoff = 0.7
@@ -197,17 +198,8 @@ cv2(lanes)
 cv2.waitKey(0)
 '''
 
-def compute(image_name, show_image):
-    image1 = cv2.imread("content/" + image_name)
-    copy = np.copy(image1)
 
-    # First get greyscale light balance
-    #a = 255 / (grey.max() - grey.min())
-    #print("alpha val: " + str(a))
-    #b = grey.min() * -a
-    #copy = cv2.convertScaleAbs(copy, alpha=a, beta=b)
-    #copy = autolevel(copy, clip_hist_percent=0.95)
-
+def hough(copy, image_name, show_image, print):
     # Now go for edge detection
     grey = Grey(copy)
     hsv = Hsv(copy)
@@ -223,13 +215,17 @@ def compute(image_name, show_image):
     # gaus_yellow = gauss(yellow)
     # edges = canny(gaus_grey)
     edges = canny(gaus)
-    #edges = laplace(weighted)
+    # edges = laplace(weighted)
     isolated = region(edges)
-    if(show_image):
+    if (show_image):
         cv2.imshow("grey", grey)
         cv2.imshow("isolated", isolated)
         cv2.imshow("weighted", weighted)
         cv2.waitKey(0)
+    if(print):
+        cv2.imwrite("content/output/" + image_name + "_grey.png", grey)
+        cv2.imwrite("content/output/" + image_name + "_isolated.png", isolated)
+        cv2.imwrite("content/output/" + image_name + "_weighted.png", weighted)
 
     lines = cv2.HoughLinesP(isolated, 2, np.pi / 180, 100, np.array([]), minLineLength=30, maxLineGap=20)
     averaged_lines = average(copy, lines)
@@ -240,7 +236,43 @@ def compute(image_name, show_image):
     else:
         print("Solution null. No output for " + image_name)
 
-def batch():
+def slidewindow(copy, image_name, show_image, print):
+    line_l = Line()
+    line_r = Line()
+
+    perspective_transformer()
+    line_l.detected = False
+    line_r.detected = False
+
+    img_orig = cv2.cvtColor(copy, cv2.COLOR_BGR2RGB)
+    img_output, plot1, plot2, plot4 = lane_finding(img_orig, line_l, line_r)
+    img_output = cv2.cvtColor(img_output, cv2.COLOR_RGB2BGR)
+    if(show_image == 1):
+        cv2.imshow("img_output", img_output)
+        cv2.imshow("plot1", plot1)
+        cv2.imshow("plot2", plot2)
+        cv2.imshow("plot4", plot4)
+        cv2.waitKey(0)
+    if(print == 1):
+        cv2.imwrite("content/output/" + image_name + "_plot1.png", plot1)
+        cv2.imwrite("content/output/" + image_name + "_plot2.png", plot2)
+        cv2.imwrite("content/output/" + image_name + "_plot4.png", plot4)
+
+    cv2.imwrite("content/output/" + image_name, img_output)
+
+# mode=0 for hough transform and canny edge detection, mode=1 for sliding windows and sobel edge detection
+def compute(image_name, show_image=0, mode=0, print=0):
+    image1 = cv2.imread("content/" + image_name)
+    copy = np.copy(image1)
+
+    if(mode == 0):
+        hough(copy, "0" + image_name, show_image, print)
+
+    if(mode == 1):
+        slidewindow(copy, "1" + image_name, show_image, print)
+
+
+def batch(mode=0):
     image_num = 0
     while image_num <= image_num_max:
         if image_num < 10:
@@ -248,9 +280,9 @@ def batch():
         else:
             image_name = image_prefix + "_0000" + str(image_num) + ".png"
         #image_path = "content/" + image_name
-        compute(image_name, 0)
+        compute(image_name, show_image=0, mode=mode)
         image_num += 1
 
 # Begin primary code
-batch() # Processes images in batch (same prefix from 0 up until image_num_max)
-#compute("um_000064.png", 1)
+batch(mode=1) # Processes images in batch (same prefix from 0 up until image_num_max)
+#compute("um_000004.png", show_image=0, mode=0, print=1)
